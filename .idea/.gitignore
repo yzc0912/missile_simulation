@@ -1,3 +1,20 @@
 # 默认忽略的文件
 /shelf/
 /workspace.xml
+# Python 缓存文件
+__pycache__/
+*.py[cod]
+
+# 虚拟环境
+venv/
+env/
+
+# 日志文件
+*.log
+
+# Jupyter Notebook 检查点
+.ipynb_checkpoints/
+
+# 操作系统临时文件
+.DS_Store
+Thumbs.db
