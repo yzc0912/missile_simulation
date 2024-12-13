@@ -23,6 +23,14 @@ class MissileCarrierSimulation3D:
         self.missile_count_var = tk.IntVar(value=5)
         ttk.Entry(control_frame, textvariable=self.missile_count_var).pack()
 
+        ttk.Label(control_frame, text="Carrier Speed:").pack()
+        self.carrier_speed_var = tk.DoubleVar(value=0.1)
+        ttk.Entry(control_frame, textvariable=self.carrier_speed_var).pack()
+
+        ttk.Label(control_frame, text="Missile Speed:").pack()
+        self.missile_speed_var = tk.DoubleVar(value=0.5)
+        ttk.Entry(control_frame, textvariable=self.missile_speed_var).pack()
+
         ttk.Button(control_frame, text="Start Simulation", command=self.start_simulation).pack(pady=5)
         ttk.Button(control_frame, text="Pause Simulation", command=self.pause_simulation).pack(pady=5)
         ttk.Button(control_frame, text="Resume Simulation", command=self.resume_simulation).pack(pady=5)
@@ -108,13 +116,20 @@ class MissileCarrierSimulation3D:
         if not self.is_running:
             return []
 
+        carrier_speed = self.carrier_speed_var.get()
+        missile_speed = self.missile_speed_var.get()
+
+        # Update carrier positions (random movement)
+        self.carriers += np.random.uniform(-carrier_speed, carrier_speed, self.carriers.shape)
+        self.carriers = np.clip(self.carriers, [5, 5, 0], [35, 35, 0])
+
         # Update missile positions
         for i in range(len(self.missiles)):
             if i < len(self.missile_targets):  # Ensure each missile has a target
                 direction = self.missile_targets[i % len(self.missile_targets)] - self.missiles[i]
                 norm = np.linalg.norm(direction)
                 if norm > 0:
-                    self.missiles[i] += 0.5 * direction / norm  # Move missiles towards targets
+                    self.missiles[i] += missile_speed * direction / norm  # Move missiles towards targets
 
         # Check if all missiles have reached z=0
         if np.all(self.missiles[:, 2] <= 0):
