@@ -4,6 +4,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import numpy as np
+from carrier import Carrier
 
 class MissileCarrierSimulation3D:
     def __init__(self, root):
@@ -43,8 +44,7 @@ class MissileCarrierSimulation3D:
         self.canvas = None
         self.animation = None
         self.missiles = []
-        self.carriers = []
-        self.missile_targets = []
+        self.carrier = None
 
         # Create Matplotlib canvas
         self.canvas_frame = ttk.Frame(self.root)
@@ -94,18 +94,17 @@ class MissileCarrierSimulation3D:
         self.ax.set_zlim(0, 20)
         self.ax.set_title("Missile and Carrier Simulation 3D")
 
-        # Initialize carriers
+        # Initialize carriers using the Carrier class
         carrier_count = self.carrier_count_var.get()
-        self.carriers = np.random.uniform(5, 35, size=(carrier_count, 3))
-        self.carriers[:, 2] = 0  # Carriers are at z=0
-        self.missile_targets = self.carriers.copy()
+        carrier_speed = self.carrier_speed_var.get()
+        self.carrier = Carrier(carrier_count, carrier_speed)
 
         # Initialize missiles
         missile_count = self.missile_count_var.get()
-        self.missiles = np.array([[0, 0, 15] for _ in range(missile_count)], dtype=np.float64)  # Starting positions at (0, 0, 15)
+        self.missiles = np.array([[0, 0, 15] for _ in range(missile_count)], dtype=np.float64)
 
         self.carrier_scatter = self.ax.scatter(
-            self.carriers[:, 0], self.carriers[:, 1], self.carriers[:, 2], c="blue", label="Carriers"
+            *self.carrier.get_positions().T, c="blue", label="Carriers"
         )
         self.missile_scatter = self.ax.scatter(
             self.missiles[:, 0], self.missiles[:, 1], self.missiles[:, 2], c="red", label="Missiles"
@@ -116,17 +115,15 @@ class MissileCarrierSimulation3D:
         if not self.is_running:
             return []
 
-        carrier_speed = self.carrier_speed_var.get()
         missile_speed = self.missile_speed_var.get()
 
-        # Update carrier positions (random movement)
-        self.carriers += np.random.uniform(-carrier_speed, carrier_speed, self.carriers.shape)
-        self.carriers = np.clip(self.carriers, [5, 5, 0], [35, 35, 0])
+        # Update carrier positions
+        self.carrier.move()
 
         # Update missile positions
         for i in range(len(self.missiles)):
-            if i < len(self.missile_targets):  # Ensure each missile has a target
-                direction = self.missile_targets[i % len(self.missile_targets)] - self.missiles[i]
+            if i < len(self.carrier.get_positions()):  # Ensure each missile has a target
+                direction = self.carrier.get_positions()[i % len(self.carrier.get_positions())] - self.missiles[i]
                 norm = np.linalg.norm(direction)
                 if norm > 0:
                     self.missiles[i] += missile_speed * direction / norm  # Move missiles towards targets
@@ -138,7 +135,7 @@ class MissileCarrierSimulation3D:
                 self.animation.event_source.stop()
 
         # Update scatter plot data
-        self.carrier_scatter._offsets3d = (self.carriers[:, 0], self.carriers[:, 1], self.carriers[:, 2])
+        self.carrier_scatter._offsets3d = (*self.carrier.get_positions().T,)
         self.missile_scatter._offsets3d = (self.missiles[:, 0], self.missiles[:, 1], self.missiles[:, 2])
         return []
 
