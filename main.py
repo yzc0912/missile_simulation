@@ -21,15 +21,15 @@ class MissileCarrierSimulation3D:
         ttk.Entry(control_frame, textvariable=self.carrier_count_var).pack()
 
         ttk.Label(control_frame, text="Number of Missiles:").pack()
-        self.missile_count_var = tk.IntVar(value=5)
+        self.missile_count_var = tk.IntVar(value=2)
         ttk.Entry(control_frame, textvariable=self.missile_count_var).pack()
 
         ttk.Label(control_frame, text="Carrier Speed:").pack()
-        self.carrier_speed_var = tk.DoubleVar(value=0.1)
+        self.carrier_speed_var = tk.DoubleVar(value=0.0015)
         ttk.Entry(control_frame, textvariable=self.carrier_speed_var).pack()
 
         ttk.Label(control_frame, text="Missile Speed:").pack()
-        self.missile_speed_var = tk.DoubleVar(value=0.5)
+        self.missile_speed_var = tk.DoubleVar(value=0.03)
         ttk.Entry(control_frame, textvariable=self.missile_speed_var).pack()
 
         ttk.Button(control_frame, text="Start Simulation", command=self.start_simulation).pack(pady=5)
