@@ -6,3 +6,6 @@
 3. 需要设置留一个接口接到我们的cpp文件上
 4. 最好是能输出每个传感器和每个导弹探测的结果到一个txt或者csv文件当中
 5. 航母要能出现多个角反或者箔条的干扰，且能被探测器探测到
+
+**已添加到gitee**
+> https://gitee.com/yangzhichao20231072/missile_simulation.git
