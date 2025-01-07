@@ -38,58 +38,137 @@ class Missile:
         """
         对“船舶 + 干扰”视为统一的潜在目标，每个导弹在当前时间步进行测量。
         
-        本需求中：
+        要求：
         1) 不区分目标类型，故不输出目标类型；
         2) 每个时间步 -> 对每个导弹输出一行，行内依次列出各目标的测量数据；
         3) 置信度用 0~1 的高斯随机数；
-        4) 相同导弹的误差固定不变。
+        4) 相同导弹的误差固定不变（即：self.missile_error_degs[missile_id] 固定）。
+
+        输出格式：
+        [ time_step, missile_id,
+        x_meas_目标1, y_meas_目标1, z_meas_目标1, scatter_目标1, confidence_目标1,
+        x_meas_目标2, y_meas_目标2, z_meas_目标2, scatter_目标2, confidence_目标2,
+        ...
+        ]
         """
-        # 汇总所有潜在目标（不区分类型）
+
+        # 将所有可能的目标(船 + 箔条 + 角反射器)汇总
         all_targets = []
-        all_targets.extend(carriers_positions)   # M 条船
-        all_targets.extend(chaff_positions)      # 若干箔条
-        all_targets.extend(corner_positions)     # 若干角反射器
+        all_targets.extend(carriers_positions)
+        all_targets.extend(chaff_positions)
+        all_targets.extend(corner_positions)
 
         # 对每枚导弹生成一行数据
         for missile_id, missile_pos in enumerate(self.missiles):
             # 取得该导弹的固定测量误差（度）
             sensor_error_deg = self.missile_error_degs[missile_id]
-            sensor_error_rad = math.radians(sensor_error_deg)
 
-            # sub_result 用来收集该导弹对每个目标的测量结果
+            # 收集该导弹对每个目标的测量结果（x_meas, y_meas, z_meas, scatter, confidence）
             sub_result = []
 
             for target_pos in all_targets:
+                # ------------------ 1) 计算导弹->目标的 3D 距离 & 真实角度 ------------------
                 dx = target_pos[0] - missile_pos[0]
                 dy = target_pos[1] - missile_pos[1]
                 dz = target_pos[2] - missile_pos[2]
 
-                distance = math.sqrt(dx*dx + dy*dy + dz*dz)
-                # 真实方位角
-                azimuth = math.atan2(dy, dx)
+                r_true = math.sqrt(dx*dx + dy*dy + dz*dz)  # 3D 距离
+                az_true = math.atan2(dy, dx)               # 方位角：-pi ~ pi
+                el_true = 0.0
+                # 如果距离足够大再计算仰角，避免除 0
+                xy_dist = math.sqrt(dx*dx + dy*dy)
+                if xy_dist > 1e-8:
+                    el_true = math.atan2(dz, xy_dist)      # 仰角：-pi/2 ~ pi/2
 
-                # 加入测量误差
-                angle_error = random.uniform(-sensor_error_rad, sensor_error_rad)
-                measured_azimuth = azimuth + angle_error
+                # -------------- 2) 生成合并后不超过 sensor_error_deg 的角度误差 --------------
+                # 在 [0, sensor_error_deg] 内选一个半径 r_rand
+                r_rand = random.uniform(0, sensor_error_deg)
+                # 随机方向 phi ∈ [0, 2π)
+                phi = random.uniform(0, 2*math.pi)
 
-                # 反投影到二维平面
-                x_meas = missile_pos[0] + distance * math.cos(measured_azimuth)
-                y_meas = missile_pos[1] + distance * math.sin(measured_azimuth)
+                error_az_deg = r_rand * math.cos(phi)
+                error_el_deg = r_rand * math.sin(phi)
 
-                # ☆ 要求 3：置信度使用 0~1 高斯随机
-                confidence = random.gauss(0.5, 0.2)  # 均值 0.5，方差 0.2
-                confidence = min(max(confidence, 0.0), 1.0)  # 截断到 [0, 1]
+                # 转为弧度
+                error_az_rad = math.radians(error_az_deg)
+                error_el_rad = math.radians(error_el_deg)
 
-                # measurement_scatter = 这里简单直接用 sensor_error_deg
-                # 也可以根据距离/其他模型定义
-                measurement_scatter = sensor_error_deg
+                # 带误差的方位角 / 仰角
+                az_meas = az_true + error_az_rad
+                el_meas = el_true + error_el_rad
 
-                # 把单个目标测量结果 (x_meas, y_meas, scatter, confidence) 连到 sub_result
-                sub_result.extend([x_meas, y_meas, measurement_scatter, confidence])
+                # ------------------ 3) 反投影到 (x_meas, y_meas, z_meas) ------------------
+                # 假设 r_true 本身比较精准，没有单独加距离误差
+                x_meas = missile_pos[0] + r_true * math.cos(el_meas) * math.cos(az_meas)
+                y_meas = missile_pos[1] + r_true * math.cos(el_meas) * math.sin(az_meas)
+                z_meas = missile_pos[2] + r_true * math.sin(el_meas)
 
-            # 组装一行：[time_step, missile_id, x_meas1, y_meas1, scatter1, conf1, x_meas2, y_meas2, scatter2, conf2, ...]
-            row = [time_step, missile_id] + sub_result
-            self.measurement_data.append(row)
+                # ------------------ 4) 置信度(0~1 的高斯随机) & measurement_scatter ------------------
+                # 例：以均值 0.8、标准差 0.2 生成一个值，并截断在 [0, 1]
+                confidence = random.gauss(0.8, 0.2)
+                confidence = min(max(confidence, 0.0), 1.0)
+
+                 # 4.1) 在 (az_true, el_true) 处计算雅可比矩阵 J
+            dx_daz = -r_true * math.cos(el_true) * math.sin(az_true)
+            dx_del = -r_true * math.sin(el_true) * math.cos(az_true)
+            dy_daz =  r_true * math.cos(el_true) * math.cos(az_true)
+            dy_del = -r_true * math.sin(el_true) * math.sin(az_true)
+
+            J = np.array([
+                [dx_daz, dx_del],
+                [dy_daz, dy_del]
+            ])
+
+            # 4.2) 将 sensor_error_deg 视为方位角、仰角的“最大标准差”
+            sigma_az_rad = math.radians(sensor_error_deg)
+            sigma_el_rad = math.radians(sensor_error_deg)
+            Cov_ae = np.diag([sigma_az_rad**2, sigma_el_rad**2])
+
+            # 4.3) 投影到 (x,y): Cov_xy = J * Cov_ae * J^T
+            Cov_xy = J @ Cov_ae @ J.T
+            eigvals, eigvecs = np.linalg.eig(Cov_xy)
+            # 排序，使 eigvals[0] >= eigvals[1]
+            idx = np.argsort(eigvals)[::-1]
+            eigvals = eigvals[idx]
+
+            # 4.4) 1σ 椭圆 => 长轴 = 2*sqrt(λ1), 短轴 = 2*sqrt(λ2)，这里需要注意是2*sqrt(λ)！！！！
+            major_axis = 0.0
+            minor_axis = 0.0
+            if eigvals[0] > 0:
+                major_axis = 2.0 * math.sqrt(eigvals[0])
+            if eigvals[1] > 0:
+                minor_axis = 2.0 * math.sqrt(eigvals[1])
+
+            # 4.6) 椭圆方向 => 与最大特征值对应的特征向量
+            v_major = eigvecs[:, 0]  # 形如 [vx, vy]
+            # atan2(y, x) 得到相对于X轴的角度 (-pi, pi)
+            angle_rad = math.atan2(v_major[1], v_major[0])
+            angle_deg = math.degrees(angle_rad)
+
+            # 测量散度，简单直接用 sensor_error_deg
+            measurement_scatter = sensor_error_deg
+
+            # ========== 6) 把单个目标的测量结果延伸到 sub_result ==========
+            # 这里在一行中输出: x_meas, y_meas, z_meas, major_axis, minor_axis, scatter, confidence
+            sub_result.extend([
+                x_meas, 
+                y_meas, 
+                z_meas, 
+                major_axis, 
+                minor_axis, 
+                angle_rad,
+                measurement_scatter, 
+                confidence
+            ])
+
+        # ========== 7) 组装一行并写入 self.measurement_data ==========
+        # 格式: [time_step, missile_id,
+        #  x_meas1, y_meas1, z_meas1, maj1, min1, scatter1, conf1,
+        #  x_meas2, y_meas2, z_meas2, maj2, min2, scatter2, conf2,
+        #  ...
+        # ]
+        row = [time_step, missile_id] + sub_result
+        self.measurement_data.append(row)
 
     def export_to_csv(self, filename="measurement_data.csv"):
         """
