@@ -41,14 +41,14 @@ ax.set_title('Current Position and Variance Ellipses')
 ax.grid(True)
 
 # 设置固定的坐标轴范围（根据实际数据范围调整）
-ax.set_xlim(15, 35)  # 设置 X 轴范围
+ax.set_xlim(20, 25)  # 设置 X 轴范围
 ax.set_ylim(15, 35)  # 设置 Y 轴范围
 
 # 初始化图形元素
 scatter_plots = {}
 ellipses = {}
 for i, tp in enumerate(target_prefixes):
-    scatter_plots[tp], = ax.plot([], [], 'o', color=colors(i), label=tp, markersize=5)
+    scatter_plots[tp], = ax.plot([], [], 'o', color=colors(i), label=tp, markersize=1)
     ellipses[tp] = Ellipse((0, 0), width=0, height=0, angle=0,
                            edgecolor=colors(i), facecolor='none', lw=2)
     ax.add_patch(ellipses[tp])
@@ -82,8 +82,8 @@ def update(frame):
             if not np.isnan(major) and not np.isnan(minor) and not np.isnan(angle):
                 ellipses[tp].set_visible(True)
                 ellipses[tp].center = (x, y)
-                ellipses[tp].width = 2 * major
-                ellipses[tp].height = 2 * minor
+                ellipses[tp].width = major
+                ellipses[tp].height = minor
                 ellipses[tp].angle = angle * 180 / np.pi
             else:
                 ellipses[tp].set_visible(False)
@@ -96,6 +96,6 @@ def update(frame):
     return list(scatter_plots.values()) + list(ellipses.values())
 
 # 创建动画
-anim = FuncAnimation(fig, update, frames=len(time_steps), interval=50, blit=False, repeat=True)
+anim = FuncAnimation(fig, update, frames=len(time_steps), interval=200, blit=False, repeat=True)
 
 plt.show()
