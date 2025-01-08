@@ -16,22 +16,27 @@ class Missile:
         self.missiles = missile_positions
         self.num_missiles = self.missiles.shape[0]
 
-        # 如果未指定传感器类别，就给一个默认列表
+        # 如果未指定传感器类别，就给一个默认列表，确保有足够的唯一值
         if sensor_categories is None:
-            self.sensor_categories = [0.1, 0.2, 0.3, 0.4, 0.6]
+            self.sensor_categories = [0.2, 0.4, 0.6, 0.8, 1.0]
         else:
-            self.sensor_categories = sensor_categories
+            # 过滤传感器类别，确保在0.2到1.0度之间
+            self.sensor_categories = [err for err in sensor_categories if 0.2 <= err <= 1.0]
+            if len(set(self.sensor_categories)) < self.NUM_SENSORS:
+                raise ValueError(f"sensor_categories必须包含至少{self.NUM_SENSORS}个在0.2到1.0度之间的唯一值")
 
         # 对于每枚导弹，随机选取 "NUM_SENSORS" 个互不相同的误差，分别对应 5 个传感器
-        # 注意：需保证 sensor_categories 的长度 >= NUM_SENSORS，否则 sample 会报错
         self.missile_sensor_errors = []  # 形状: [ [err_sen1, err_sen2, ..., err_sen5], [...], ... ]
-
         for _ in range(self.num_missiles):
             chosen_errors = random.sample(self.sensor_categories, self.NUM_SENSORS)
             self.missile_sensor_errors.append(chosen_errors)
 
         # 用于输出到 CSV 的测量数据（每元素是一行：time_step, missile_id, sensor_id, ...）
         self.measurement_data = []
+
+        # 用于记录船舶真实位置数据
+        self.ship_locations_data = []
+        self.max_ships = 0  # 动态追踪最大船舶数量
 
     def generate_sensor_measurements(
         self,
@@ -69,6 +74,21 @@ class Missile:
             all_targets.append((pos, "chaff"))
         for pos in corner_positions:
             all_targets.append((pos, "corner"))
+
+        # 更新最大船舶数量
+        num_ships = carriers_positions.shape[0]
+        if num_ships > self.max_ships:
+            self.max_ships = num_ships
+
+        # 记录当前时间步的船舶真实位置
+        ship_row = [time_step]
+        for pos in carriers_positions:
+            ship_row.extend([pos[0], pos[1], pos[2]])
+        # 如果当前时间步船舶数量少于之前的最大数量，填充 None
+        if num_ships < self.max_ships:
+            padding_ships = self.max_ships - num_ships
+            ship_row.extend([None, None, None] * padding_ships)
+        self.ship_locations_data.append(ship_row)
 
         # 对每枚导弹进行测量
         for missile_id, missile_pos in enumerate(self.missiles):
@@ -181,30 +201,56 @@ class Missile:
                 row = [time_step, missile_id, sensor_id] + sub_result
                 self.measurement_data.append(row)
 
-    def export_to_csv(self, filename="measurement_data.csv"):
+    def export_to_csv(self, measurement_filename="measurement_data.csv", ship_loc_filename="ship_loc.csv"):
         """
-        导出 CSV，每个 time_step + missile + sensor 占一行
-        对应固定 MAX_TARGETS 个目标（每目标 8 字段）。
+        导出 CSV 文件：
+        1. measurement_data.csv - 包含每个 time_step, missile_id, sensor_id 的测量数据。
+        2. ship_loc.csv - 包含每个 time_step 所有船舶的真实位置。
+        
+        measurement_data.csv 格式:
+        [TimeStep, MissileID, SensorID, Target1_x, Target1_y, Target1_z, Target1_MajorAxis, Target1_MinorAxis, Target1_AngleRad, Target1_Scatter, Target1_Confidence, ..., Target20_x, Target20_y, Target20_z, Target20_MajorAxis, Target20_MinorAxis, Target20_AngleRad, Target20_Scatter, Target20_Confidence]
+        
+        ship_loc.csv 格式:
+        [TimeStep, ship1_x, ship1_y, ship1_z, ship2_x, ship2_y, ship2_z, ..., shipN_x, shipN_y, shipN_z]
         """
-        if not self.measurement_data:
-            return
+        # 导出 measurement_data.csv
+        if self.measurement_data:
+            with open(measurement_filename, mode='w', newline='') as csv_file:
+                writer = csv.writer(csv_file)
 
-        with open(filename, mode='w', newline='') as csv_file:
-            writer = csv.writer(csv_file)
+                # 生成表头
+                headers = ["TimeStep", "MissileID", "SensorID"]
+                for i in range(1, self.MAX_TARGETS + 1):
+                    headers.extend([
+                        f"Target{i}_x", f"Target{i}_y", f"Target{i}_z",
+                        f"Target{i}_MajorAxis", f"Target{i}_MinorAxis",
+                        f"Target{i}_AngleRad", f"Target{i}_Scatter",
+                        f"Target{i}_Confidence"
+                    ])
 
-            # 生成表头
-            headers = ["TimeStep", "MissileID", "SensorID"]
-            for i in range(1, Missile.MAX_TARGETS + 1):
-                headers.extend([
-                    f"Target{i}_x", f"Target{i}_y", f"Target{i}_z",
-                    f"Target{i}_MajorAxis", f"Target{i}_MinorAxis",
-                    f"Target{i}_AngleRad", f"Target{i}_Scatter",
-                    f"Target{i}_Confidence"
-                ])
+                writer.writerow(headers)  # 写入表头
 
-            writer.writerow(headers)
+                for row in self.measurement_data:
+                    writer.writerow(row)
 
-            for row in self.measurement_data:
-                writer.writerow(row)
+            print(f"Measurement data exported to {measurement_filename}.")
 
-        print(f"Measurement data exported to {filename}.")
+        # 导出 ship_loc.csv
+        if self.ship_locations_data:
+            with open(ship_loc_filename, mode='w', newline='') as csv_file:
+                writer = csv.writer(csv_file)
+
+                # 确定最大船舶数量
+                max_ships = self.max_ships
+
+                # 生成表头
+                headers = ["TimeStep"]
+                for i in range(1, max_ships + 1):
+                    headers.extend([f"ship{i}_x", f"ship{i}_y", f"ship{i}_z"])
+
+                writer.writerow(headers)  # 写入表头
+
+                for ship_row in self.ship_locations_data:
+                    writer.writerow(ship_row)
+
+            print(f"Ship locations exported to {ship_loc_filename}.")
