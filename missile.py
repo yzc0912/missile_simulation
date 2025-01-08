@@ -18,7 +18,7 @@ class Missile:
 
         # 如果未指定传感器类别，就给一个默认列表，确保有足够的唯一值
         if sensor_categories is None:
-            self.sensor_categories = [0.2, 0.4, 0.6, 0.8, 1.0]
+            self.sensor_categories = [0.2, 0.4, 0.5, 0.6, 0.8]
         else:
             # 过滤传感器类别，确保在0.2到1.0度之间
             self.sensor_categories = [err for err in sensor_categories if 0.2 <= err <= 1.0]
